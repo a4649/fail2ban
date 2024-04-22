@@ -1,0 +1,64 @@
+---
+- name: Deploy Fail2ban no Rocky Linux
+  hosts: '{{ nodes }}'
+  become: true
+
+  tasks:
+    - name: Install requirements
+      dnf:
+        name: ['python3-setuptools', 'python3-distutils-extra', 'python3-systemd', 'python3-dns', 'python3-devel', 'git']
+        state: present
+        update_cache: True
+
+    - name: Clone Fail2Ban repo
+      shell: 'git clone https://github.com/fail2ban/fail2ban.git /tmp/fail2ban'
+
+    - name: Build Fail2Ban
+      shell: 'cd /tmp/fail2ban; sudo /usr/bin/python3 setup.py install'
+      delay: 5
+
+    - name: Copy jail configuration file
+      copy:
+        remote_src: no
+        src: jail.local
+        dest: /etc/fail2ban/jail.local
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: remove old jail file
+      file:
+        path: /etc/fail2ban/jail.conf
+        state: absent
+
+    - name: Copy firewalld configuration file
+      copy:
+        remote_src: no
+        src: 00-firewalld.conf
+        dest: /etc/fail2ban/jail.d/00-firewalld.local
+        owner: root
+        group: root
+        mode: '0644'
+       
+    - name: Copy systemd service file
+      copy:
+        remote_src: yes
+        src: /tmp/fail2ban/build/fail2ban.service 
+        dest: /etc/systemd/system/
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Update systemd file
+      shell: sed -i 's/Environment/#Environment/g' /etc/systemd/system/fail2ban.service
+
+    - name: clean stuff
+      shell: rm -rf /tmp/fail2ban
+
+    - name: Enable and start fail2ban service
+      systemd:
+        daemon_reload: true
+        name: fail2ban
+        state: restarted
+        enabled: yes
+
